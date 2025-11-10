@@ -43,11 +43,17 @@ jobs:
           cp -r view/* site/
 
       - name: Inject Google Maps API Key (optional)
-        if: ${{ secrets.GOOGLE_MAPS_API_KEY != '' }}
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
         run: |
-          echo "Injecting Google Maps API key into site/index.html (will be public)"
-          # Use a placeholder in index.html: __GOOGLE_MAPS_API_KEY__
-          perl -0777 -pe "s/__GOOGLE_MAPS_API_KEY__/${{ secrets.GOOGLE_MAPS_API_KEY }}/g" -i site/index.html || true
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            echo "Injecting Google Maps API key into site/index.html (will be public)"
+            # Replace placeholder __GOOGLE_MAPS_API_KEY__ in index.html with the secret
+            # Use perl to handle multiline safely
+            perl -0777 -pe 'BEGIN{$k=$ENV{"GOOGLE_MAPS_API_KEY"}} s/__GOOGLE_MAPS_API_KEY__/$k/g' -i site/index.html || true
+          else
+            echo "No GOOGLE_MAPS_API_KEY provided; skipping injection"
+          fi
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
