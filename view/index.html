@@ -52,7 +52,9 @@
 
                 const ul = document.getElementById('donations-list');
                 
-                donations.forEach(donation => {
+                const colors = ['#FF0000', '#0000FF', '#008000', '#FFA500', '#800080'];
+
+                donations.forEach((donation, idx) => {
                     // Crea un marcador para cada donación
                     const marker = new google.maps.Marker({
                         position: donation.coordenadas,
@@ -78,6 +80,44 @@
                     const li = document.createElement('li');
                     li.textContent = `${donation.nombre} (${donation.tipo})`;
                     ul.appendChild(li);
+
+                    // Si la donación tiene reportes (puntos por los que pasó), dibujar la ruta
+                    if (donation.reportes && donation.reportes.length > 0) {
+                        const routePath = donation.reportes.map(r => r.coordenadas);
+                        const color = colors[idx % colors.length];
+
+                        // Dibujar polyline
+                        const routeLine = new google.maps.Polyline({
+                            path: routePath,
+                            geodesic: true,
+                            strokeColor: color,
+                            strokeOpacity: 0.8,
+                            strokeWeight: 3,
+                        });
+                        routeLine.setMap(map);
+
+                        // Marcar cada punto de la ruta con un pequeño círculo y una infoWindow
+                        donation.reportes.forEach(r => {
+                            const pointMarker = new google.maps.Marker({
+                                position: r.coordenadas,
+                                map: map,
+                                title: r.nombre,
+                                icon: {
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    scale: 5,
+                                    fillColor: color,
+                                    fillOpacity: 1,
+                                    strokeWeight: 0
+                                }
+                            });
+
+                            const ptInfo = new google.maps.InfoWindow({
+                                content: `<strong>${r.nombre}</strong><p>${r.descripcion}</p>`
+                            });
+
+                            pointMarker.addListener('click', () => ptInfo.open({ anchor: pointMarker, map, shouldFocus: false }));
+                        });
+                    }
                 });
 
             } catch (error) {
