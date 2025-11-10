@@ -1,5 +1,11 @@
 name: CI/CD
 
+# Grant workflow permissions to push to the repository and manage Pages
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 on:
   push:
     branches: [ main ]
