@@ -18,6 +18,9 @@
     <ul id="donations-list"></ul>
 
     <script>
+        // Placeholder for GitHub Pages deploy: CI will replace __GOOGLE_MAPS_API_KEY__ with the real key
+        // If not replaced, the value will be an empty string and the app will try to load it from /api/config
+        window.__GMAPS_API_KEY__ = '__GOOGLE_MAPS_API_KEY__';
         let map;
 
         // 1. Función para inicializar y cargar el mapa
@@ -129,15 +132,26 @@
         // 3. Proceso inicial: Obtener la API Key y luego inicializar el mapa
         async function initializeApp() {
             try {
-                // Obtenemos la clave de API del backend
-                const response = await fetch('/api/config');
-                const config = await response.json();
-                
-                if (config.mapsApiKey) {
-                    initMap(config.mapsApiKey);
-                } else {
-                    console.error("No se encontró la API Key en la configuración.");
-                    alert("Error: La clave de Google Maps no está configurada.");
+                // Primero verificamos si la clave fue inyectada durante el despliegue a GitHub Pages
+                const injectedKey = window.__GMAPS_API_KEY__ && window.__GMAPS_API_KEY__ !== '__GOOGLE_MAPS_API_KEY__' ? window.__GMAPS_API_KEY__ : null;
+                if (injectedKey) {
+                    initMap(injectedKey);
+                    return;
+                }
+
+                // Si no hay clave inyectada (ej. corriendo con backend), la solicitamos al servidor
+                try {
+                    const response = await fetch('/api/config');
+                    const config = await response.json();
+                    if (config.mapsApiKey) {
+                        initMap(config.mapsApiKey);
+                    } else {
+                        console.error("No se encontró la API Key en la configuración.");
+                        alert("Error: La clave de Google Maps no está configurada.");
+                    }
+                } catch (err) {
+                    console.error('Error al obtener la configuración inicial desde el servidor:', err);
+                    alert('Error: La clave de Google Maps no está disponible.');
                 }
 
             } catch (error) {

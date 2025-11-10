@@ -1,0 +1,56 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Install & quick checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Quick checks
+        run: |
+          echo "No tests configured. Add tests and update this workflow to run them."
+
+  deploy-gh-pages:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    # Deploy to GitHub Pages: copy `view/` -> site/, optionally inject API key,
+    # then publish `site/` to the gh-pages branch.
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare site folder
+        run: |
+          rm -rf site || true
+          mkdir site
+          cp -r view/* site/
+
+      - name: Inject Google Maps API Key (optional)
+        if: ${{ secrets.GOOGLE_MAPS_API_KEY != '' }}
+        run: |
+          echo "Injecting Google Maps API key into site/index.html (will be public)"
+          # Use a placeholder in index.html: __GOOGLE_MAPS_API_KEY__
+          perl -0777 -pe "s/__GOOGLE_MAPS_API_KEY__/${{ secrets.GOOGLE_MAPS_API_KEY }}/g" -i site/index.html || true
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

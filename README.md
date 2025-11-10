@@ -127,3 +127,32 @@ Si querés, puedo:
 - Añadir tests o endpoints adicionales (p. ej. filtro por tipo o bounding box).
 
 Dime qué prefieres y lo añado.
+
+## CI/CD (GitHub Actions) y despliegue
+
+Se incluyó un workflow de GitHub Actions en `.github/workflows/ci-deploy.yml` que realiza:
+
+- Instalación de dependencias en cada push a la rama `main`.
+- Un paso opcional de despliegue a Heroku si configuras secretos en el repositorio.
+
+Cómo usarlo:
+
+1. Ve a Settings → Secrets → Actions en tu repositorio y añade los siguientes secrets si querés desplegar automáticamente a Heroku:
+  - `HEROKU_API_KEY` — la API key de Heroku (obtenida en Heroku Dashboard > Account > API Key).
+  - `HEROKU_APP_NAME` — el nombre de la app en Heroku.
+  - `HEROKU_EMAIL` — tu email asociado a Heroku (opcional, la acción la usa para identificación).
+
+2. El workflow corre automáticamente en pushes a `main`. Si los secretos anteriores están vacíos, la fase de despliegue se ignorará.
+
+Si querés desplegar la interfaz estática en GitHub Pages (lo que dejará la Google Maps API Key pública en el sitio):
+
+1. Añadí el secret `GOOGLE_MAPS_API_KEY` en Settings → Secrets → Actions con tu clave.
+2. El workflow usa ese secret para inyectar la clave dentro de `index.html` antes de publicar `view/` en la rama `gh-pages`.
+
+Advertencia de seguridad:
+- La clave será pública en el sitio de GitHub Pages. Por eso es esencial restringir la clave en Google Cloud Console por Referentes HTTP (ej. `https://<tu-usuario>.github.io/*`) y por APIs (Maps JavaScript API).
+- Si preferís mantener la clave privada y servir la app desde el backend (Heroku, Railway), no inyectes la clave en GitHub Pages.
+
+Notas:
+- Actualmente el workflow sólo hace instalación y un mensaje, ya que este repo no tiene tests configurados. Si añadís `npm test` o pasos de build, actualizá el workflow para ejecutarlos.
+- Si preferís desplegar a otro proveedor (Vercel, Railway, etc.), puedo añadir pasos alternativos y ejemplos de configuración.
