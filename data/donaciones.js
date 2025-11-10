@@ -5,9 +5,10 @@ const donaciones = [
         id: 1,
         nombre: "Albergue Sol Naciente",
         descripcion: "Donación de alimentos no perecederos.",
+        // Coordenadas ahora representan el destino final (último punto de la ruta)
         coordenadas: {
-            lat: 4.5981,  // Latitud
-            lng: -74.0760 // Longitud (Ejemplo: Bogotá)
+            lat: 4.6150,  // Latitud (Destino final)
+            lng: -74.0500 // Longitud (Destino final)
         },
         tipo: "Comida",
         // Reportes / puntos por los que pasó la donación (ruta)
@@ -23,9 +24,10 @@ const donaciones = [
         id: 2,
         nombre: "Centro Comunitario Esperanza",
         descripcion: "Recolección de ropa de invierno.",
+        // Coordenadas representarán el destino final (último punto de la ruta)
         coordenadas: {
-            lat: 3.4516,  // Latitud
-            lng: -76.5320 // Longitud (Ejemplo: Cali)
+            lat: 3.4580,  // Latitud (Destino final)
+            lng: -76.5280 // Longitud (Destino final)
         },
         tipo: "Ropa",
         reportes: [
@@ -40,7 +42,7 @@ const donaciones = [
         descripcion: "Entrega de útiles escolares.",
         coordenadas: {
             lat: 6.2442,  // Latitud
-            lng: -75.5812 // Longitud (Ejemplo: Medellín)
+            lng: -75.5812 // Longitud (Ejemplo: Medellín) - destino final
         },
         tipo: "Educación",
         // Este ejemplo no tiene una ruta larga, solo el punto final

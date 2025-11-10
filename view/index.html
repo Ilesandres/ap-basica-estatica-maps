@@ -70,13 +70,21 @@
                         content: `<h3>${donation.nombre}</h3><p>${donation.descripcion}</p><p>Tipo: ${donation.tipo}</p>`
                     });
 
-                    // Agrega un listener para mostrar la infoWindow al hacer clic
+                    // Agrega listeners para mostrar la infoWindow al hacer clic y al pasar el cursor
                     marker.addListener("click", () => {
                         infoWindow.open({
                             anchor: marker,
                             map,
                             shouldFocus: false,
                         });
+                    });
+                    // Mostrar al colocar el cursor (hover)
+                    marker.addListener('mouseover', () => {
+                        infoWindow.open({ anchor: marker, map, shouldFocus: false });
+                    });
+                    // Ocultar al sacar el cursor
+                    marker.addListener('mouseout', () => {
+                        infoWindow.close();
                     });
 
                     // Agrega el nombre a la lista
@@ -119,6 +127,10 @@
                             });
 
                             pointMarker.addListener('click', () => ptInfo.open({ anchor: pointMarker, map, shouldFocus: false }));
+                            // Mostrar nombre al pasar el cursor
+                            pointMarker.addListener('mouseover', () => ptInfo.open({ anchor: pointMarker, map, shouldFocus: false }));
+                            // Ocultar al sacar el cursor
+                            pointMarker.addListener('mouseout', () => ptInfo.close());
                         });
                     }
                 });
