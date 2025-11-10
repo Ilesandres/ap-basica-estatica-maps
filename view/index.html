@@ -14,6 +14,19 @@
 </head>
 <body>
     <h1>Localización de Donaciones</h1>
+    <div id="controls" style="margin-bottom:12px;">
+        <strong>Crear nueva donación</strong>
+        <div>
+            <input id="don-name" placeholder="Nombre" />
+            <input id="don-type" placeholder="Tipo" />
+            <input id="don-desc" placeholder="Descripción" />
+            <button id="select-dest-btn">Seleccionar destino en mapa</button>
+            <span id="dest-coords" style="margin-left:8px;font-size:0.9em;color:#333"></span>
+            <button id="create-don-btn">Crear donación</button>
+            <button id="finalize-don-btn" style="margin-left:8px;display:none;">Finalizar donación seleccionada</button>
+        </div>
+        <div style="margin-top:6px;font-size:0.9em;color:#555">Instrucciones: Selecciona una donación de la lista, luego haz clic en el mapa para agregar reportes (puntos) a esa donación. Para crear una donación, usa "Seleccionar destino en mapa" y después "Crear donación".</div>
+    </div>
     <div id="map"></div>
     <ul id="donations-list"></ul>
 
@@ -41,12 +54,87 @@
                 center: defaultLocation,
             });
 
+            // variables para manejo de estado
+            window._markers = [];
+            window._routeLines = [];
+            window._selectedDonationId = null;
+            window._selectingDestino = false;
+            window._newDestinoCoords = null;
+            window._tempDestinoMarker = null;
+
+            // Listener global de clicks en el mapa
+            map.addListener('click', async (e) => {
+                const clickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+
+                // Si estamos seleccionando destino para crear una donación
+                if (window._selectingDestino) {
+                    window._newDestinoCoords = clickedCoords;
+                    // mostrar marcador temporal
+                    if (window._tempDestinoMarker) window._tempDestinoMarker.setMap(null);
+                    window._tempDestinoMarker = new google.maps.Marker({ position: clickedCoords, map, title: 'Destino (temporal)' });
+                    document.getElementById('dest-coords').textContent = `Destino: ${clickedCoords.lat.toFixed(6)}, ${clickedCoords.lng.toFixed(6)}`;
+                    window._selectingDestino = false;
+                    document.getElementById('select-dest-btn').textContent = 'Seleccionar destino en mapa';
+                    return;
+                }
+
+                // Si hay una donación seleccionada, pedir nombre y descripción y crear un reporte
+                if (window._selectedDonationId) {
+                    // Pedimos nombre (permitimos cancelar)
+                    const nombre = prompt('Nombre del reporte (puedes cancelar):', '');
+                    if (nombre === null) return; // usuario canceló
+                    // Pedimos descripción (permitimos cancelar; si cancela, usamos cadena vacía)
+                    let descripcion = prompt('Descripción del reporte (opcional):', '');
+                    if (descripcion === null) descripcion = '';
+                    const esFinal = false; // La confirmación de finalización se maneja solo al hacer click en el destino
+
+                    try {
+                        const resp = await fetch(`/api/donaciones/${window._selectedDonationId}/reportes`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ nombre, descripcion, coordenadas: clickedCoords, final: esFinal })
+                        });
+                        if (!resp.ok) throw new Error('Error al crear reporte');
+                        // recargar marcadores
+                        loadDonationMarkers();
+                        // Obtener la donación actualizada y mostrarla por consola
+                        try {
+                            const donResp = await fetch(`/api/donaciones/${window._selectedDonationId}`);
+                            if (donResp.ok) {
+                                const donJson = await donResp.json();
+                                console.log('Donación actualizada (con reportes):', donJson.data);
+                            } else {
+                                console.warn('No se pudo obtener la donación actualizada. Estado:', donResp.status);
+                            }
+                        } catch (err2) {
+                            console.error('Error al obtener la donación actualizada:', err2);
+                        }
+                    } catch (err) {
+                        console.error('Error al crear reporte:', err);
+                        // No mostramos alert al usuario; el error queda en la consola
+                    }
+                }
+            });
+
             // Llama a la función para cargar y mostrar los puntos
             loadDonationMarkers();
         }
 
         // 2. Función para obtener los datos del backend y agregar marcadores
+        async function clearMarkersAndRoutes() {
+            // limpiar marcadores anteriores
+            if (window._markers) {
+                window._markers.forEach(m => m.setMap(null));
+            }
+            if (window._routeLines) {
+                window._routeLines.forEach(l => l.setMap(null));
+            }
+            window._markers = [];
+            window._routeLines = [];
+        }
+
         async function loadDonationMarkers() {
+            await clearMarkersAndRoutes();
             try {
                 // Obtenemos los datos de las donaciones del backend
                 const response = await fetch('/api/donaciones');
@@ -54,6 +142,7 @@
                 const donations = result.data;
 
                 const ul = document.getElementById('donations-list');
+                ul.innerHTML = '';
                 
                 const colors = ['#FF0000', '#0000FF', '#008000', '#FFA500', '#800080'];
 
@@ -64,21 +153,15 @@
                         map: map,
                         title: donation.nombre,
                     });
+                    // guardamos marcador principal
+                    window._markers.push(marker);
                     
                     // Crea una ventana de información (InfoWindow)
                     const infoWindow = new google.maps.InfoWindow({
                         content: `<h3>${donation.nombre}</h3><p>${donation.descripcion}</p><p>Tipo: ${donation.tipo}</p>`
                     });
 
-                    // Agrega listeners para mostrar la infoWindow al hacer clic y al pasar el cursor
-                    marker.addListener("click", () => {
-                        infoWindow.open({
-                            anchor: marker,
-                            map,
-                            shouldFocus: false,
-                        });
-                    });
-                    // Mostrar al colocar el cursor (hover)
+                    // Agrega listeners para mostrar la infoWindow al pasar el cursor
                     marker.addListener('mouseover', () => {
                         infoWindow.open({ anchor: marker, map, shouldFocus: false });
                     });
@@ -87,9 +170,69 @@
                         infoWindow.close();
                     });
 
+                    // Click en el marcador principal: si la donación está seleccionada, preguntar por finalizar
+                    marker.addListener('click', async () => {
+                        const isSelected = window._selectedDonationId === donation.id;
+                        // Determinar si ya existe un reporte final igual al destino
+                        const lastRep = (donation.reportes && donation.reportes.length) ? donation.reportes[donation.reportes.length - 1] : null;
+                        const lastEqualsDest = lastRep && lastRep.coordenadas && Math.abs(lastRep.coordenadas.lat - donation.coordenadas.lat) < 1e-6 && Math.abs(lastRep.coordenadas.lng - donation.coordenadas.lng) < 1e-6;
+
+                        if (isSelected) {
+                            if (lastEqualsDest) {
+                                // Ya finalizada: mostrar info
+                                infoWindow.open({ anchor: marker, map, shouldFocus: false });
+                                alert('La donación ya tiene el destino marcado como reporte final.');
+                                return;
+                            }
+
+                            const confirmar = confirm('Has hecho click en el destino. ¿Deseas finalizar la donación conectando el último reporte con este destino?');
+                            if (!confirmar) {
+                                infoWindow.open({ anchor: marker, map, shouldFocus: false });
+                                return;
+                            }
+
+                            try {
+                                // Llamar al endpoint de finalizar para marcar la donación como finalizada
+                                const resp = await fetch(`/api/donaciones/${donation.id}/finalizar`, { method: 'POST' });
+                                if (!resp.ok) throw new Error('Error al finalizar donación');
+                                // recargar marcadores (dibujará la conexión desde último reporte al destino)
+                                await loadDonationMarkers();
+                                // mostrar la donación actualizada en consola
+                                const donResp = await fetch(`/api/donaciones/${donation.id}`);
+                                if (donResp.ok) {
+                                    const donJson = await donResp.json();
+                                    console.log('Donación finalizada (sin cambiar destino):', donJson.data);
+                                }
+                                alert('Donación finalizada y conectada al destino final.');
+                            } catch (err) {
+                                console.error(err);
+                                alert('No se pudo finalizar la donación. Revisa la consola.');
+                            }
+                        } else {
+                            // Si no está seleccionada, simplemente mostrar la infoWindow
+                            infoWindow.open({ anchor: marker, map, shouldFocus: false });
+                        }
+                    });
+                    // Mostrar al colocar el cursor (hover)
+                    
+
                     // Agrega el nombre a la lista
                     const li = document.createElement('li');
                     li.textContent = `${donation.nombre} (${donation.tipo})`;
+                    li.style.cursor = 'pointer';
+                    li.dataset.donationId = donation.id;
+                    // click para seleccionar la donación
+                    li.addEventListener('click', () => {
+                        // marcar visualmente
+                        document.querySelectorAll('#donations-list li').forEach(n => n.style.background = '');
+                        li.style.background = '#eef';
+                        window._selectedDonationId = donation.id;
+                        // centrar mapa en la donación seleccionada
+                        map.panTo(donation.coordenadas);
+                            // mostrar botón de finalizar
+                            const finBtn = document.getElementById('finalize-don-btn');
+                            if (finBtn) finBtn.style.display = 'inline-block';
+                    });
                     ul.appendChild(li);
 
                     // Si la donación tiene reportes (puntos por los que pasó), dibujar la ruta
@@ -106,6 +249,27 @@
                             strokeWeight: 3,
                         });
                         routeLine.setMap(map);
+                        window._routeLines.push(routeLine);
+
+                        // Si la donación está finalizada pero el último reporte no coincide con el destino,
+                        // dibujamos una conexión entre el último reporte y el destino definido al crear la donación.
+                        if (donation.finalizado && donation.reportes && donation.reportes.length > 0) {
+                            const last = donation.reportes[donation.reportes.length - 1];
+                            const lastCoords = last.coordenadas;
+                            const destCoords = donation.coordenadas;
+                            const coordsEqual = Math.abs(lastCoords.lat - destCoords.lat) < 1e-6 && Math.abs(lastCoords.lng - destCoords.lng) < 1e-6;
+                            if (!coordsEqual) {
+                                const finalConnector = new google.maps.Polyline({
+                                    path: [ lastCoords, destCoords ],
+                                    geodesic: true,
+                                    strokeColor: color,
+                                    strokeOpacity: 0.9,
+                                    strokeWeight: 3,
+                                });
+                                finalConnector.setMap(map);
+                                window._routeLines.push(finalConnector);
+                            }
+                        }
 
                         // Marcar cada punto de la ruta con un pequeño círculo y una infoWindow
                         donation.reportes.forEach(r => {
@@ -131,6 +295,7 @@
                             pointMarker.addListener('mouseover', () => ptInfo.open({ anchor: pointMarker, map, shouldFocus: false }));
                             // Ocultar al sacar el cursor
                             pointMarker.addListener('mouseout', () => ptInfo.close());
+                            window._markers.push(pointMarker);
                         });
                     }
                 });
@@ -172,6 +337,70 @@
         }
 
         initializeApp();
+
+        // UI bindings
+        document.addEventListener('DOMContentLoaded', () => {
+            const selectDestBtn = document.getElementById('select-dest-btn');
+            const createDonBtn = document.getElementById('create-don-btn');
+
+            selectDestBtn.addEventListener('click', () => {
+                window._selectingDestino = !window._selectingDestino;
+                selectDestBtn.textContent = window._selectingDestino ? 'Click en el mapa para ubicar destino (Cancelar)' : 'Seleccionar destino en mapa';
+                if (!window._selectingDestino) {
+                    // cancelar selección
+                    window._newDestinoCoords = null;
+                    document.getElementById('dest-coords').textContent = '';
+                    if (window._tempDestinoMarker) { window._tempDestinoMarker.setMap(null); window._tempDestinoMarker = null; }
+                }
+            });
+
+            createDonBtn.addEventListener('click', async () => {
+                const nombre = document.getElementById('don-name').value.trim();
+                const tipo = document.getElementById('don-type').value.trim();
+                const descripcion = document.getElementById('don-desc').value.trim();
+                const coords = window._newDestinoCoords;
+                if (!nombre) { alert('Ingrese un nombre para la donación'); return; }
+                if (!coords) { alert('Seleccione el destino en el mapa antes de crear la donación'); return; }
+
+                try {
+                    const resp = await fetch('/api/donaciones', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nombre, tipo, descripcion, coordenadas: coords })
+                    });
+                    if (!resp.ok) throw new Error('Error al crear donación');
+                    // limpiar inputs
+                    document.getElementById('don-name').value = '';
+                    document.getElementById('don-type').value = '';
+                    document.getElementById('don-desc').value = '';
+                    document.getElementById('dest-coords').textContent = '';
+                    if (window._tempDestinoMarker) { window._tempDestinoMarker.setMap(null); window._tempDestinoMarker = null; }
+                    window._newDestinoCoords = null;
+                    // recargar
+                    loadDonationMarkers();
+                } catch (err) {
+                    console.error(err);
+                    alert('No se pudo crear la donación. Revisa la consola.');
+                }
+            });
+
+            // Finalizar donación seleccionada con el último reporte
+            const finalizeBtn = document.getElementById('finalize-don-btn');
+            finalizeBtn.addEventListener('click', async () => {
+                const id = window._selectedDonationId;
+                if (!id) { alert('No hay donación seleccionada'); return; }
+                if (!confirm('¿Confirmas finalizar la donación usando el último reporte como destino?')) return;
+                try {
+                    const resp = await fetch(`/api/donaciones/${id}/finalizar`, { method: 'POST' });
+                    if (!resp.ok) throw new Error('Error al finalizar donación');
+                    const json = await resp.json();
+                    console.log('Donación finalizada:', json.data);
+                    loadDonationMarkers();
+                } catch (err) {
+                    console.error(err);
+                    alert('No se pudo finalizar la donación. Revisa la consola.');
+                }
+            });
+        });
 
     </script>
 </body>
