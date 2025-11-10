@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Donaciones - Google Maps</title>
+    <style>
+        /* Estilos básicos para que el mapa se vea */
+        #map {
+            height: 600px; /* Altura del mapa */
+            width: 100%;  /* Ancho del mapa */
+        }
+    </style>
+</head>
+<body>
+    <h1>Localización de Donaciones</h1>
+    <div id="map"></div>
+    <ul id="donations-list"></ul>
+
+    <script>
+        let map;
+
+        // 1. Función para inicializar y cargar el mapa
+        async function initMap(apiKey, donations) {
+            // Carga la API de Google Maps con la clave
+            const mapsScript = document.createElement('script');
+            mapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMapContent`;
+            mapsScript.defer = true;
+            document.head.appendChild(mapsScript);
+        }
+        
+        // Esta función es llamada por el script de Google Maps al cargarse
+        window.initMapContent = function() {
+            const defaultLocation = { lat: 4.5, lng: -74.0 }; // Centro de Colombia (Ajusta esto)
+            
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 5,
+                center: defaultLocation,
+            });
+
+            // Llama a la función para cargar y mostrar los puntos
+            loadDonationMarkers();
+        }
+
+        // 2. Función para obtener los datos del backend y agregar marcadores
+        async function loadDonationMarkers() {
+            try {
+                // Obtenemos los datos de las donaciones del backend
+                const response = await fetch('/api/donaciones');
+                const result = await response.json();
+                const donations = result.data;
+
+                const ul = document.getElementById('donations-list');
+                
+                donations.forEach(donation => {
+                    // Crea un marcador para cada donación
+                    const marker = new google.maps.Marker({
+                        position: donation.coordenadas,
+                        map: map,
+                        title: donation.nombre,
+                    });
+                    
+                    // Crea una ventana de información (InfoWindow)
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: `<h3>${donation.nombre}</h3><p>${donation.descripcion}</p><p>Tipo: ${donation.tipo}</p>`
+                    });
+
+                    // Agrega un listener para mostrar la infoWindow al hacer clic
+                    marker.addListener("click", () => {
+                        infoWindow.open({
+                            anchor: marker,
+                            map,
+                            shouldFocus: false,
+                        });
+                    });
+
+                    // Agrega el nombre a la lista
+                    const li = document.createElement('li');
+                    li.textContent = `${donation.nombre} (${donation.tipo})`;
+                    ul.appendChild(li);
+                });
+
+            } catch (error) {
+                console.error("Error al obtener las donaciones:", error);
+                alert("No se pudieron cargar las donaciones del servidor.");
+            }
+        }
+
+        // 3. Proceso inicial: Obtener la API Key y luego inicializar el mapa
+        async function initializeApp() {
+            try {
+                // Obtenemos la clave de API del backend
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                if (config.mapsApiKey) {
+                    initMap(config.mapsApiKey);
+                } else {
+                    console.error("No se encontró la API Key en la configuración.");
+                    alert("Error: La clave de Google Maps no está configurada.");
+                }
+
+            } catch (error) {
+                console.error("Error al obtener la configuración inicial:", error);
+            }
+        }
+
+        initializeApp();
+
+    </script>
+</body>
+</html>

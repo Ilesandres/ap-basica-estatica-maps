@@ -1,0 +1,38 @@
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build / output
+dist/
+build/
+coverage/
+
+# IDE/editor settings
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.swp
+
+# Database files
+*.sqlite
+*.sqlite3
+
+# Optional lockfiles (uncomment if you don't want to track them)
+# package-lock.json
+# yarn.lock
