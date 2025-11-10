@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Donaciones - Google Maps</title>
+    <style>
+        /* Estilos básicos para que el mapa se vea */
+        #map {
+            height: 600px; /* Altura del mapa */
+            width: 100%;  /* Ancho del mapa */
+        }
+    </style>
+</head>
+<body>
+    <h1>Localización de Donaciones</h1>
+    <div id="map"></div>
+    <ul id="donations-list"></ul>
+
+    <script>
+        // Placeholder for GitHub Pages deploy: CI will replace AIzaSyC55ytCYBbBKrqbm10kHQBmwXNyYoxCogE with the real key
+        // If not replaced, the value will be an empty string and the app will try to load it from /api/config
+        window.__GMAPS_API_KEY__ = 'AIzaSyC55ytCYBbBKrqbm10kHQBmwXNyYoxCogE';
+        let map;
+
+        // 1. Función para inicializar y cargar el mapa
+        async function initMap(apiKey, donations) {
+            // Carga la API de Google Maps con la clave
+            const mapsScript = document.createElement('script');
+            mapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMapContent`;
+            mapsScript.defer = true;
+            document.head.appendChild(mapsScript);
+        }
+        
+        // Esta función es llamada por el script de Google Maps al cargarse
+        window.initMapContent = function() {
+            const defaultLocation = { lat: 4.5, lng: -74.0 }; // Centro de Colombia (Ajusta esto)
+            
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 5,
+                center: defaultLocation,
+            });
+
+            // Llama a la función para cargar y mostrar los puntos
+            loadDonationMarkers();
+        }
+
+        // 2. Función para obtener los datos del backend y agregar marcadores
+        async function loadDonationMarkers() {
+            try {
+                // Obtenemos los datos de las donaciones del backend
+                const response = await fetch('/api/donaciones');
+                const result = await response.json();
+                const donations = result.data;
+
+                const ul = document.getElementById('donations-list');
+                
+                const colors = ['#FF0000', '#0000FF', '#008000', '#FFA500', '#800080'];
+
+                donations.forEach((donation, idx) => {
+                    // Crea un marcador para cada donación
+                    const marker = new google.maps.Marker({
+                        position: donation.coordenadas,
+                        map: map,
+                        title: donation.nombre,
+                    });
+                    
+                    // Crea una ventana de información (InfoWindow)
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: `<h3>${donation.nombre}</h3><p>${donation.descripcion}</p><p>Tipo: ${donation.tipo}</p>`
+                    });
+
+                    // Agrega un listener para mostrar la infoWindow al hacer clic
+                    marker.addListener("click", () => {
+                        infoWindow.open({
+                            anchor: marker,
+                            map,
+                            shouldFocus: false,
+                        });
+                    });
+
+                    // Agrega el nombre a la lista
+                    const li = document.createElement('li');
+                    li.textContent = `${donation.nombre} (${donation.tipo})`;
+                    ul.appendChild(li);
+
+                    // Si la donación tiene reportes (puntos por los que pasó), dibujar la ruta
+                    if (donation.reportes && donation.reportes.length > 0) {
+                        const routePath = donation.reportes.map(r => r.coordenadas);
+                        const color = colors[idx % colors.length];
+
+                        // Dibujar polyline
+                        const routeLine = new google.maps.Polyline({
+                            path: routePath,
+                            geodesic: true,
+                            strokeColor: color,
+                            strokeOpacity: 0.8,
+                            strokeWeight: 3,
+                        });
+                        routeLine.setMap(map);
+
+                        // Marcar cada punto de la ruta con un pequeño círculo y una infoWindow
+                        donation.reportes.forEach(r => {
+                            const pointMarker = new google.maps.Marker({
+                                position: r.coordenadas,
+                                map: map,
+                                title: r.nombre,
+                                icon: {
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    scale: 5,
+                                    fillColor: color,
+                                    fillOpacity: 1,
+                                    strokeWeight: 0
+                                }
+                            });
+
+                            const ptInfo = new google.maps.InfoWindow({
+                                content: `<strong>${r.nombre}</strong><p>${r.descripcion}</p>`
+                            });
+
+                            pointMarker.addListener('click', () => ptInfo.open({ anchor: pointMarker, map, shouldFocus: false }));
+                        });
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al obtener las donaciones:", error);
+                alert("No se pudieron cargar las donaciones del servidor.");
+            }
+        }
+
+        // 3. Proceso inicial: Obtener la API Key y luego inicializar el mapa
+        async function initializeApp() {
+            try {
+                // Primero verificamos si la clave fue inyectada durante el despliegue a GitHub Pages
+                const injectedKey = window.__GMAPS_API_KEY__ && window.__GMAPS_API_KEY__ !== 'AIzaSyC55ytCYBbBKrqbm10kHQBmwXNyYoxCogE' ? window.__GMAPS_API_KEY__ : null;
+                if (injectedKey) {
+                    initMap(injectedKey);
+                    return;
+                }
+
+                // Si no hay clave inyectada (ej. corriendo con backend), la solicitamos al servidor
+                try {
+                    const response = await fetch('/api/config');
+                    const config = await response.json();
+                    if (config.mapsApiKey) {
+                        initMap(config.mapsApiKey);
+                    } else {
+                        console.error("No se encontró la API Key en la configuración.");
+                        alert("Error: La clave de Google Maps no está configurada.");
+                    }
+                } catch (err) {
+                    console.error('Error al obtener la configuración inicial desde el servidor:', err);
+                    alert('Error: La clave de Google Maps no está disponible.');
+                }
+
+            } catch (error) {
+                console.error("Error al obtener la configuración inicial:", error);
+            }
+        }
+
+        initializeApp();
+
+    </script>
+</body>
+</html>
